@@ -22,8 +22,8 @@ const aiRecommendations = ref([
     storageCode: '402G',
     storageName: 'Nanchang After-sales Warehouse',
     availableQuantity: '20 EA',
-    duration: '58 H',
-    amount: '720 RMB',
+    road: '639',
+    roadUnit: 'KM',
     reason:
       'Primary recommendation: after-sales warehouse + stock meets target + lead time 58h (shortest among candidates) + low cost.'
   },
@@ -40,8 +40,8 @@ const aiRecommendations = ref([
     storageCode: '406K',
     storageName: 'Guiyang After-sales Warehouse',
     availableQuantity: '50 EA',
-    duration: '76 H',
-    amount: '800 RMB',
+    road: '333',
+    roadUnit: 'KM',
     reason:
       'Alternative recommendation: after-sales warehouse + stock meets target + lead time 76h (second shortest among candidates).'
   },
@@ -58,8 +58,8 @@ const aiRecommendations = ref([
     storageCode: '202B',
     storageName: 'Beijing Warehouse',
     availableQuantity: '2000 EA',
-    duration: '34 H',
-    amount: '600 RMB',
+    road: '573',
+    roadUnit: 'KM',
     reason:
       'Secondary alternative: regular warehouse + stock meets target + shortest lead time (across all warehouses) + low cost.'
   },
@@ -76,8 +76,8 @@ const aiRecommendations = ref([
     storageCode: '201A',
     storageName: 'Shanghai Warehouse',
     availableQuantity: '1000 EA',
-    duration: '55 H',
-    amount: '780 RMB',
+    road: '102',
+    roadUnit: 'KM',
     reason:
       'Secondary alternative: regular warehouse + stock meets target + lead time 55h.'
   },
@@ -94,8 +94,8 @@ const aiRecommendations = ref([
     storageCode: '204D',
     storageName: 'Guangzhou Warehouse',
     availableQuantity: '1600 EA',
-    duration: '58 H',
-    amount: '800 RMB',
+    road: '705',
+    roadUnit: 'KM',
     reason:
       'Secondary alternative: regular warehouse + stock meets target + lead time 58h.'
   },
@@ -112,8 +112,8 @@ const aiRecommendations = ref([
     storageCode: '203C',
     storageName: 'Shenzhen Warehouse',
     availableQuantity: '1800 EA',
-    duration: '58 H',
-    amount: '850 RMB',
+    road: '300',
+    roadUnit: 'KM',
     reason:
       'Secondary alternative: regular warehouse + stock meets target + lead time 58h (same as Shenzhen) + lower cost.'
   },
@@ -130,8 +130,8 @@ const aiRecommendations = ref([
     storageCode: '205E',
     storageName: 'Chongqing Warehouse',
     availableQuantity: '800 EA',
-    duration: '76 H',
-    amount: '700 RMB',
+    road: '509',
+    roadUnit: 'KM',
     reason:
       'Secondary alternative: regular warehouse + stock meets target + longest lead time (76h).'
   },
@@ -148,8 +148,8 @@ const aiRecommendations = ref([
     storageCode: '401F',
     storageName: 'Nanjing After-sales Warehouse',
     availableQuantity: '10 EA',
-    duration: '54 H',
-    amount: '750 RMB',
+    road: '264',
+    roadUnit: 'KM',
     reason:
       'Not recommended: after-sales warehouse + lead time 54h (second shortest vs 52h) + insufficient stock.'
   },
@@ -166,8 +166,8 @@ const aiRecommendations = ref([
     storageCode: '403H',
     storageName: 'Luoyang After-sales Warehouse',
     availableQuantity: '12 EA',
-    duration: '52 H',
-    amount: '560 RMB',
+    road: '651',
+    roadUnit: 'KM',
     reason:
       'Not recommended: after-sales warehouse + lead time 52h (shortest among after-sales warehouses) + low cost but insufficient stock.'
   },
@@ -184,8 +184,8 @@ const aiRecommendations = ref([
     storageCode: '405J',
     storageName: 'Hefei After-sales Warehouse',
     availableQuantity: '8 EA',
-    duration: '52 H',
-    amount: '750 RMB',
+    road: '431',
+    roadUnit: 'KM',
     reason:
       'Not recommended: after-sales warehouse + lead time 52h (same as Luoyang) + higher cost than Luoyang and insufficient stock.'
   }
@@ -538,6 +538,7 @@ const closeAiReasonTooltip = () => {
         <div class="actions">
           <ui5-button design="Emphasized" icon="create">Search</ui5-button>
           <ui5-button design="Positive" icon="workflow-tasks" @click="onTransferClick">Transfer</ui5-button>
+          <ui5-button design="Emphasized" icon="create">AI Suggestion</ui5-button>
           <ui5-button class="ai-rule-button" design="Transparent" @click="openAiRuleDialog">
             AI Rule
           </ui5-button>
@@ -572,7 +573,7 @@ const closeAiReasonTooltip = () => {
                 @mouseleave="closeDurationTooltip"
                 @focusin="openDurationTooltip"
                 @focusout="closeDurationTooltip"
-                >Transit Time</span
+                >Road</span
               >
             </ui5-table-header-cell>
             <ui5-table-header-cell
@@ -587,7 +588,7 @@ const closeAiReasonTooltip = () => {
                 @mouseleave="closeAmountTooltip"
                 @focusin="openAmountTooltip"
                 @focusout="closeAmountTooltip"
-                >Transport Cost</span
+                >Road Unit</span
               >
             </ui5-table-header-cell>
             <ui5-table-header-cell
@@ -621,7 +622,7 @@ const closeAiReasonTooltip = () => {
             @keydown.enter.prevent="onRowKeydown($event, row.key)"
           >
             <ui5-table-cell>
-              <div class="selection-cell">
+              <div class="selection-cell" @click.stop="toggleRowSelection(row.key)">
                 <ui5-checkbox
                   class="row-checkbox"
                   :checked="isRowSelected(row.key)"
@@ -671,10 +672,10 @@ const closeAiReasonTooltip = () => {
               <div class="cell">{{ row.availableQuantity }}</div>
             </ui5-table-cell>
             <ui5-table-cell>
-              <div class="cell">{{ row.duration }}</div>
+              <div class="cell">{{ row.road }}</div>
             </ui5-table-cell>
             <ui5-table-cell>
-              <div class="cell">{{ row.amount }}</div>
+              <div class="cell">{{ row.roadUnit }}</div>
             </ui5-table-cell>
             <ui5-table-cell class="ai-reason-cell">
               <div class="cell ai-text">{{ row.reason }}</div>
@@ -825,14 +826,14 @@ const closeAiReasonTooltip = () => {
     <ui5-toast ref="toastRef" placement="BottomCenter">{{ toastMessage }}</ui5-toast>
     <ui5-popover ref="durationTooltipRef" hide-arrow placement-type="Top" class="tooltip-popover">
       <div class="tooltip-content">
-        Transit time<br />
-        Combines the material locations of the source and target warehouses with material weight and calls an external logistics website API to calculate transit time and freight cost.<br />
+        Road<br />
+        Distance from source warehouse to target warehouse.<br />
       </div>
     </ui5-popover>
     <ui5-popover ref="amountTooltipRef" hide-arrow placement-type="Top" class="tooltip-popover">
       <div class="tooltip-content">
-        Transfer cost<br />
-        Uses the same logistics data and external API to estimate transfer cost (freight).<br />
+        Road Unit<br />
+        Unit of measurement for road distance (default: KM).<br />
       </div>
     </ui5-popover>
     <ui5-popover ref="aiReasonTooltipRef" hide-arrow placement-type="Top" class="tooltip-popover">
@@ -945,7 +946,10 @@ const closeAiReasonTooltip = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 2rem;
+  min-height: 2.5rem;
+  width: 100%;
+  padding: 0;
+  cursor: pointer;
 }
 
 .ai-reason-cell {
@@ -1076,10 +1080,21 @@ const closeAiReasonTooltip = () => {
   --sapField_BorderColor: #5d7ec5;
   --sapField_Hover_BorderColor: #0a6ed1;
   --sapField_Background: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  min-height: 20px;
 }
 
 :deep(.row-checkbox::part(root)) {
-  padding: 0;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+:deep(.row-checkbox::part(native-input)) {
+  cursor: pointer;
 }
 
 :deep(.table-row) {
@@ -1114,6 +1129,10 @@ const closeAiReasonTooltip = () => {
   padding: 0.85rem 1rem;
   font-size: 0.95rem;
   color: #2f3c48;
+}
+
+:deep(.table-row .ui5-table-cell:first-child) {
+  padding: 0;
 }
 
 :deep(.table-row:nth-child(even) .ui5-table-cell) {
