@@ -48,6 +48,54 @@ async function getAccessToken() {
   }
 }
 
+// ============ SBPA Token 缓存 ============
+let sbpaCachedToken = null
+let sbpaTokenExpiry = null
+
+/**
+ * 获取 SBPA OAuth 2.0 访问令牌
+ */
+async function getSBPAAccessToken() {
+  if (sbpaCachedToken && sbpaTokenExpiry && Date.now() < sbpaTokenExpiry) {
+    console.log('Using cached SBPA token')
+    return sbpaCachedToken
+  }
+
+  console.log('Fetching new SBPA access token...')
+  
+  try {
+    const credentials = Buffer.from(
+      `${process.env.SBPA_CLIENT_ID}:${process.env.SBPA_CLIENT_SECRET}`
+    ).toString('base64')
+
+    const tokenUrl = `${process.env.SBPA_AUTH_URL}/oauth/token`
+
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'grant_type=client_credentials'
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`SBPA token request failed: ${response.status} - ${errorText}`)
+    }
+
+    const data = await response.json()
+    sbpaCachedToken = data.access_token
+    sbpaTokenExpiry = Date.now() + (data.expires_in - 300) * 1000
+    
+    console.log('SBPA token fetched successfully')
+    return sbpaCachedToken
+  } catch (error) {
+    console.error('Failed to get SBPA access token:', error)
+    throw error
+  }
+}
+
 /**
  * 从XML结构中提取物流数据
  */
@@ -110,6 +158,74 @@ function extractLogistData(xmlObj, material, plant) {
   
   return results;
 }
+
+
+/**
+ * SBPA 发送邮件接口
+ */
+app.post('/api/send-email', async (req, res) => {
+  try {
+    const { sendto, sendcc, subject, content } = req.body
+
+    // 验证必填字段
+    if (!sendto || !subject || !content) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'sendto, subject, and content are required'
+      })
+    }
+
+    console.log(`Triggering SBPA email workflow...`)
+    console.log(`To: ${sendto}, Subject: ${subject}`)
+
+    // 获取 SBPA 访问令牌
+    const token = await getSBPAAccessToken()
+
+    // 调用 SBPA API Trigger
+    const response = await fetch(process.env.SBPA_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'irpa-api-key': 'cshG4BIysbF76izv7O5XYZ3ldPvhMcVq'
+      },
+      body: JSON.stringify({
+        definitionId: process.env.SBPA_DEFINITION_ID,
+        context: {
+          sendto,
+          sendcc: sendcc || '',
+          subject,
+          content
+        }
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('SBPA API error:', errorText)
+      return res.status(response.status).json({
+        error: 'SBPA API request failed',
+        message: errorText
+      })
+    }
+
+    const data = await response.json()
+    console.log('SBPA workflow triggered successfully:', data)
+    
+    res.json({
+      success: true,
+      workflowInstanceId: data.id || data.workflowInstanceId,
+      message: 'Email workflow triggered successfully',
+      data
+    })
+  } catch (error) {
+    console.error('Error in /api/send-email:', error)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    })
+  }
+})
 
 /**
  * 健康检查接口

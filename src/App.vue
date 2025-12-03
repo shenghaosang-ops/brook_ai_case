@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { getStockRecommendations } from './services/api.js'
+import { sendEmail } from './services/api.js'
 
 const filters = reactive({
   material: '10000293',
@@ -398,10 +399,39 @@ const onConfirmDialogApprove = () => {
   }, 1000)
 }
 
-const onEmailSend = () => {
-  return runWithLoading('AI Agent is sending the notification email...', () => {
-    closeEmailDialog()
-    showToast('Transfer notification sent. Process completed ✅')
+// 更新邮件发送功能
+const onEmailSend = async () => {
+  console.log('=== Email Send Debug ===')
+  console.log('emailForm.to:', emailForm.to)
+  console.log('emailForm.cc:', emailForm.cc)
+  console.log('emailForm.subject:', emailForm.subject)
+  console.log('emailContent.value:', emailContent.value)
+  console.log('=======================')
+  return runWithLoading('AI Agent is sending the notification email...', async () => {
+    try {
+      
+      // 调用 SBPA API 发送邮件
+      const result = await sendEmail({
+        sendto: emailForm.to,
+        sendcc: emailForm.cc,
+        subject: emailForm.subject,
+        content: emailContent.value 
+      })
+      // const result = await sendEmail({
+      //   sendto: "xiaoting.leng@sap.com",
+      //   sendcc: "shenghao.sang@sap.com",
+      //   subject: emailForm.subject,
+      //   content: emailContent.value
+      // })
+
+      console.log('Email sent successfully:', result)
+      
+      closeEmailDialog()
+      await showToast(`Transfer notification sent successfully ✅ (Workflow ID: ${result.workflowInstanceId || 'N/A'})`)
+    } catch (error) {
+      console.error('Failed to send email:', error)
+      await showToast(`Failed to send email: ${error.message}`)
+    }
   }, 1100)
 }
 
@@ -435,8 +465,11 @@ const onEmailInput = (event) => {
   emailContent.value = event.target.value
 }
 
-const handleEmailFormInput = (key) => (event) => {
-  emailForm[key] = event.target.value
+const handleEmailFormInput = (key, event) => {
+  // UI5 Web Components 使用 event.target.value
+  const value = event.target.value
+  console.log(`Email form field '${key}' changed to:`, value)
+  emailForm[key] = value
 }
 
 const onEditPreferences = () => {
@@ -828,7 +861,7 @@ const closeAiReasonTooltip = () => {
             <ui5-input
               id="email-sender"
               :value="emailForm.sender"
-              @input="handleEmailFormInput('sender')"
+              @input="(e) => handleEmailFormInput('sender', e)"
             />
           </div>
           <div class="field">
@@ -836,7 +869,7 @@ const closeAiReasonTooltip = () => {
             <ui5-input
               id="email-to"
               :value="emailForm.to"
-              @input="handleEmailFormInput('to')"
+              @input="(e) => handleEmailFormInput('to', e)"
             />
           </div>
           <div class="field">
@@ -844,7 +877,7 @@ const closeAiReasonTooltip = () => {
             <ui5-input
               id="email-cc"
               :value="emailForm.cc"
-              @input="handleEmailFormInput('cc')"
+              @input="(e) => handleEmailFormInput('cc', e)"
             />
           </div>
           <div class="field">
@@ -852,7 +885,7 @@ const closeAiReasonTooltip = () => {
             <ui5-input
               id="email-subject"
               :value="emailForm.subject"
-              @input="handleEmailFormInput('subject')"
+              @input="(e) => handleEmailFormInput('subject', e)"
             />
           </div>
         </div>

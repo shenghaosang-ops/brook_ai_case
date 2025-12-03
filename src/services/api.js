@@ -7,6 +7,8 @@ const API_CONFIG = {
   }
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
 /**
  * 获取Mock数据作为备用
  */
@@ -47,6 +49,42 @@ function getMockData(material, plant) {
       reason: 'Alternative recommendation: after-sales warehouse + stock meets target + lead time second shortest among candidates.'
     }
   ]
+}
+
+/**
+ * 通过 SBPA 发送邮件
+ * @param {Object} emailData - 邮件数据
+ * @param {string} emailData.sendto - 收件人邮箱
+ * @param {string} emailData.sendcc - 抄送邮箱（可选）
+ * @param {string} emailData.subject - 邮件主题
+ * @param {string} emailData.content - 邮件内容
+ * @returns {Promise<Object>} 发送结果
+ */
+export async function sendEmail(emailData) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sendto: emailData.sendto,
+        sendcc: emailData.sendcc || '',
+        subject: emailData.subject,
+        content: emailData.content
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || `Email send failed: ${response.status}`)
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Failed to send email:', error)
+    throw error
+  }
 }
 
 /**
