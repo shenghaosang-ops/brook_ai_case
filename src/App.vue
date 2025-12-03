@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { getStockRecommendations } from './services/api.js'
 
 const filters = reactive({
   material: '10000293',
@@ -8,25 +9,30 @@ const filters = reactive({
   targetQuantity: '20'
 })
 
+const aiRecommendations = ref([])
+
+// 仅用于开发参考的示例数据结构
+const _exampleDataStructure = {
+  key: 'row-1',
+  priority: 1,
+  available: true,
+  materialCode: '10000293',
+  materialDescription: 'Centrifugal pump impeller assembly',
+  companyCode: '1000',
+  companyName: 'BestRun CN',
+  plantCode: '1010',
+  plantName: 'Plant 1010',
+  storageCode: '402G',
+  storageName: 'Nanchang After-sales Warehouse',
+  availableQuantity: '20 EA',
+  road: '639',
+  roadUnit: 'KM',
+  reason: 'Primary recommendation'
+}
+
+/* OLD MOCK DATA - REMOVED
 const aiRecommendations = ref([
   {
-    key: 'row-1',
-    priority: 1,
-    available: true,
-    materialCode: '10000293',
-    materialDescription: 'Centrifugal pump impeller assembly',
-    companyCode: '1000',
-    companyName: 'BestRun CN',
-    plantCode: '1010',
-    plantName: 'Plant 1010',
-    storageCode: '402G',
-    storageName: 'Nanchang After-sales Warehouse',
-    availableQuantity: '20 EA',
-    road: '639',
-    roadUnit: 'KM',
-    reason:
-      'Primary recommendation: after-sales warehouse + stock meets target + lead time 58h (shortest among candidates) + low cost.'
-  },
   {
     key: 'row-2',
     priority: 2,
@@ -190,6 +196,7 @@ const aiRecommendations = ref([
       'Not recommended: after-sales warehouse + lead time 52h (same as Luoyang) + higher cost than Luoyang and insufficient stock.'
   }
 ])
+*/
 
 const aiRuleDialogRef = ref(null)
 const confirmDialogRef = ref(null)
@@ -198,6 +205,7 @@ const toastRef = ref(null)
 
 const toastMessage = ref('')
 const selectedKeys = ref([])
+const useMockData = ref(false)
 
 const confirmForm = reactive({
   material: '',
@@ -232,7 +240,7 @@ const userPreferenceRules = ref([
   'Serial numbers that meet all requirements shall be displayed in green; serial numbers for transfers that cannot be executed shall be displayed in red; other serial numbers shall be displayed in yellow.'
 ])
 
-const isTableLoading = ref(true)
+const isTableLoading = ref(false)
 const isActionLoading = ref(false)
 const actionLoadingMessage = ref('')
 
@@ -448,10 +456,48 @@ const closeEmailDialog = () => {
   closeDialog(emailDialogRef)
 }
 
+const onSearchClick = async () => {
+  if (!filters.material || !filters.plant) {
+    showToast('Please enter Material and Plant to search.')
+    return
+  }
+
+  return runWithLoading('Fetching real-time data from CPI...', async () => {
+    try {
+      console.log('Before API call, current data length:', aiRecommendations.value.length)
+      const data = await getStockRecommendations(
+        filters.material, 
+        filters.plant, 
+        useMockData.value
+      )
+      console.log('Received data from API:', data)
+      console.log('Data length:', data.length)
+      console.log('First item:', data[0])
+      
+      // 强制清空后重新赋值
+      aiRecommendations.value = []
+      await new Promise(resolve => setTimeout(resolve, 0))
+      aiRecommendations.value = data
+      
+      console.log('After assignment, aiRecommendations length:', aiRecommendations.value.length)
+      
+      if (data.length === 0) {
+        showToast('No recommendations found from CPI.')
+      } else {
+        showToast(`Successfully loaded ${data.length} recommendations from CPI`)
+      }
+    } catch (error) {
+      showToast(`CPI Error: ${error.message}. Please check backend connection.`)
+      console.error('CPI API error:', error)
+      // 清空数据以避免显示旧数据
+      aiRecommendations.value = []
+    }
+  }, 1500)
+}
+
 onMounted(() => {
-  wait(1800).then(() => {
-    isTableLoading.value = false
-  })
+  // 自动加载初始数据
+  onSearchClick()
 })
 
 const durationTooltipRef = ref(null)
@@ -539,7 +585,7 @@ const closeAiReasonTooltip = () => {
           </div>
         </div>
         <div class="actions">
-          <ui5-button design="Emphasized" icon="create">Search</ui5-button>
+          <ui5-button design="Emphasized" icon="create" @click="onSearchClick">Search</ui5-button>
           <ui5-button design="Positive" icon="workflow-tasks" @click="onTransferClick">Transfer</ui5-button>
           <ui5-button design="Emphasized" icon="create">AI Suggestion</ui5-button>
           <ui5-button class="ai-rule-button" design="Transparent" @click="openAiRuleDialog">
