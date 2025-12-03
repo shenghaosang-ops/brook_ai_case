@@ -225,8 +225,11 @@ const defaultRules = Object.freeze([
 ])
 
 const userPreferenceRules = ref([
-  'Prefer transfers from after-sales warehouses.',
-  'Transfer must be in a full batch; do not split across multiple warehouses.'
+  'Prioritize transfers from warehouses starting with the prefix "4".',
+  'Transfers must be made in full batches; partial transfers from multiple warehouses are not allowed.',
+  'Prioritize transfers from the warehouse with the shortest mileage.',
+  'Conduct priority ranking and provide the reasoning for each row\'s ranking.',
+  'Serial numbers that meet all requirements shall be displayed in green; serial numbers for transfers that cannot be executed shall be displayed in red; other serial numbers shall be displayed in yellow.'
 ])
 
 const isTableLoading = ref(true)
@@ -706,8 +709,6 @@ const closeAiReasonTooltip = () => {
           <ul class="rule-list">
             <li v-for="rule in userPreferenceRules" :key="rule">{{ rule }}</li>
           </ul>
-          <ui5-button class="rule-edit-button" design="Transparent" @click="onEditPreferences">Edit preferences</ui5-button>
-          <p class="rule-hint">Click Edit to adjust your personal preferences.</p>
         </section>
       </div>
       <div slot="footer" class="dialog-footer">
