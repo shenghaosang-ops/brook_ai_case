@@ -18,16 +18,17 @@ const _exampleDataStructure = {
   priority: 1,
   available: true,
   materialCode: '10000293',
-  materialDescription: 'Centrifugal pump impeller assembly',
+  materialDescription: 'impeller',
   companyCode: '1000',
   companyName: 'BestRun CN',
   plantCode: '1010',
   plantName: 'Plant 1010',
   storageCode: '402G',
   storageName: 'Nanchang After-sales Warehouse',
-  availableQuantity: '20 EA',
+  country: 'China',
+  city: 'Nanchang',
+  availableQuantity: '20',
   road: '639',
-  roadUnit: 'KM',
   reason: 'Primary recommendation'
 }
 
@@ -207,6 +208,7 @@ const toastRef = ref(null)
 const toastMessage = ref('')
 const selectedKeys = ref([])
 const useMockData = ref(false)
+const showAiColumns = ref(false)
 
 const confirmForm = reactive({
   material: '',
@@ -489,6 +491,11 @@ const closeEmailDialog = () => {
   closeDialog(emailDialogRef)
 }
 
+const onAiSuggestionClick = () => {
+  showAiColumns.value = true
+  showToast('AI ranking columns are now visible')
+}
+
 const onSearchClick = async () => {
   if (!filters.material || !filters.plant) {
     showToast('Please enter Material and Plant to search.')
@@ -529,12 +536,12 @@ const onSearchClick = async () => {
 }
 
 onMounted(() => {
-  // 自动加载初始数据
-  onSearchClick()
+  // 不自动加载数据，避免页面卡顿
+  // 用户可以点击 Search 按钮手动加载
+  console.log('App mounted, ready for user search')
 })
 
 const durationTooltipRef = ref(null)
-const amountTooltipRef = ref(null)
 const aiReasonTooltipRef = ref(null)
 
 const showPopover = (popoverRef, target) => {
@@ -558,14 +565,6 @@ const openDurationTooltip = (event) => {
 
 const closeDurationTooltip = () => {
   closePopover(durationTooltipRef)
-}
-
-const openAmountTooltip = (event) => {
-  showPopover(amountTooltipRef, event.currentTarget)
-}
-
-const closeAmountTooltip = () => {
-  closePopover(amountTooltipRef)
 }
 
 const openAiReasonTooltip = (event) => {
@@ -619,8 +618,8 @@ const closeAiReasonTooltip = () => {
         </div>
         <div class="actions">
           <ui5-button design="Emphasized" icon="create" @click="onSearchClick">Search</ui5-button>
+          <ui5-button class="ai-suggestion-button" design="Emphasized" @click="onAiSuggestionClick">AI Suggestion</ui5-button>
           <ui5-button design="Positive" icon="workflow-tasks" @click="onTransferClick">Transfer</ui5-button>
-          <ui5-button design="Emphasized" icon="create">AI Suggestion</ui5-button>
           <ui5-button class="ai-rule-button" design="Transparent" @click="openAiRuleDialog">
             AI Rule
           </ui5-button>
@@ -635,18 +634,18 @@ const closeAiReasonTooltip = () => {
           </div>
           <ui5-table v-else class="recommendation-table" mode="None">
             <ui5-table-header-row slot="headerRow">
-              <ui5-table-header-cell width="68px" min-width="64px">Select</ui5-table-header-cell>
-              <ui5-table-header-cell width="88px" min-width="82px">Priority</ui5-table-header-cell>
-              <ui5-table-header-cell width="128px" min-width="112px">Material ID</ui5-table-header-cell>
-              <ui5-table-header-cell width="130px" min-width="70px">Material Description</ui5-table-header-cell>
-            <ui5-table-header-cell width="160px" min-width="140px">Company</ui5-table-header-cell>
-            <ui5-table-header-cell width="130px" min-width="100px">Plant</ui5-table-header-cell>
-            <ui5-table-header-cell width="130px" min-width="100px">Warehouse</ui5-table-header-cell>
-            <ui5-table-header-cell width="100px" min-width="80px">Available Quantity</ui5-table-header-cell>
+              <ui5-table-header-cell class="col-select">Select</ui5-table-header-cell>
+              <ui5-table-header-cell v-if="showAiColumns" class="col-priority">Priority</ui5-table-header-cell>
+              <ui5-table-header-cell class="col-material">Material ID</ui5-table-header-cell>
+              <ui5-table-header-cell class="col-desc">Material Description</ui5-table-header-cell>
+            <ui5-table-header-cell class="col-company">Company</ui5-table-header-cell>
+            <ui5-table-header-cell class="col-plant">Plant</ui5-table-header-cell>
+            <ui5-table-header-cell class="col-warehouse">Warehouse</ui5-table-header-cell>
+            <ui5-table-header-cell class="col-country">Country</ui5-table-header-cell>
+            <ui5-table-header-cell class="col-city">City</ui5-table-header-cell>
+            <ui5-table-header-cell class="col-qty">Available Quantity</ui5-table-header-cell>
             <ui5-table-header-cell
-              class="tooltip-cell"
-              width="100px"
-              min-width="80px"
+              class="tooltip-cell col-road"
             >
               <span
                 class="header-label hover-label derived-label"
@@ -659,24 +658,8 @@ const closeAiReasonTooltip = () => {
               >
             </ui5-table-header-cell>
             <ui5-table-header-cell
-              class="tooltip-cell"
-              width="100px"
-              min-width="80px"
-            >
-              <span
-                class="header-label hover-label derived-label"
-                tabindex="0"
-                @mouseenter="openAmountTooltip"
-                @mouseleave="closeAmountTooltip"
-                @focusin="openAmountTooltip"
-                @focusout="closeAmountTooltip"
-                >Road Unit</span
-              >
-            </ui5-table-header-cell>
-            <ui5-table-header-cell
-              class="tooltip-cell"
-              width="300px"
-              min-width="300px"
+              v-if="showAiColumns"
+              class="tooltip-cell col-ai-result"
             >
               <div
                 class="ai-header hover-label derived-label"
@@ -712,7 +695,7 @@ const closeAiReasonTooltip = () => {
                 ></ui5-checkbox>
               </div>
             </ui5-table-cell>
-            <ui5-table-cell>
+            <ui5-table-cell v-if="showAiColumns">
               <div class="priority-cell">
                 <template v-if="priorityDisplay(row).icon">
                   <ui5-icon :name="priorityDisplay(row).icon" class="status-icon danger" />
@@ -745,21 +728,23 @@ const closeAiReasonTooltip = () => {
               </div>
             </ui5-table-cell>
             <ui5-table-cell>
-              <div class="cell dual-line">
+              <div class="cell">
                 <span class="code">{{ row.storageCode }}</span>
-                <span class="name">{{ row.storageName }}</span>
               </div>
+            </ui5-table-cell>
+            <ui5-table-cell>
+              <div class="cell">{{ row.country }}</div>
+            </ui5-table-cell>
+            <ui5-table-cell>
+              <div class="cell">{{ row.city }}</div>
             </ui5-table-cell>
             <ui5-table-cell>
               <div class="cell">{{ row.availableQuantity }}</div>
             </ui5-table-cell>
             <ui5-table-cell>
-              <div class="cell">{{ row.road }}</div>
+              <div class="cell">{{ row.road }} KM</div>
             </ui5-table-cell>
-            <ui5-table-cell>
-              <div class="cell">{{ row.roadUnit }}</div>
-            </ui5-table-cell>
-            <ui5-table-cell class="ai-reason-cell">
+            <ui5-table-cell v-if="showAiColumns" class="ai-reason-cell">
               <div class="cell ai-text">{{ row.reason }}</div>
             </ui5-table-cell>
             </ui5-table-row>
@@ -907,13 +892,7 @@ const closeAiReasonTooltip = () => {
     <ui5-popover ref="durationTooltipRef" hide-arrow placement-type="Top" class="tooltip-popover">
       <div class="tooltip-content">
         Road<br />
-        Distance from source warehouse to target warehouse.<br />
-      </div>
-    </ui5-popover>
-    <ui5-popover ref="amountTooltipRef" hide-arrow placement-type="Top" class="tooltip-popover">
-      <div class="tooltip-content">
-        Road Unit<br />
-        Unit of measurement for road distance (default: KM).<br />
+        Distance from source warehouse to target warehouse (in KM).<br />
       </div>
     </ui5-popover>
     <ui5-popover ref="aiReasonTooltipRef" hide-arrow placement-type="Top" class="tooltip-popover">
@@ -1019,21 +998,36 @@ const closeAiReasonTooltip = () => {
 }
 
 .table-card.wide .recommendation-table {
-  min-width: 1380px;
+  width: 100%;
+  table-layout: fixed;
 }
+
+/* Column width distribution */
+:deep(.col-select) { width: 3%; min-width: 60px; }
+:deep(.col-priority) { width: 2%; min-width: 70px; }
+:deep(.col-material) { width: 7%; min-width: 90px; }
+:deep(.col-desc) { width: 7%; min-width: 90px; }
+:deep(.col-company) { width: 9%; min-width: 100px; }
+:deep(.col-plant) { width: 8%; min-width: 90px; }
+:deep(.col-warehouse) { width: 8%; min-width: 90px; }
+:deep(.col-country) { width: 6%; min-width: 80px; }
+:deep(.col-city) { width: 9%; min-width: 90px; }
+:deep(.col-qty) { width: 9%; min-width: 100px; }
+:deep(.col-road) { width: 8%; min-width: 90px; }
+:deep(.col-ai-result) { width: 24%; min-width: 250px; }
 
 .selection-cell {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 2.5rem;
   width: 100%;
-  padding: 0;
+  padding: 0 0.5rem;
   cursor: pointer;
 }
 
 .ai-reason-cell {
-  min-width: 300px;
+  min-width: 200px;
 }
 
 .ai-text {
@@ -1041,8 +1035,9 @@ const closeAiReasonTooltip = () => {
   white-space: normal;
   line-height: 1.5;
   word-break: break-word;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   max-width: 100%;
+  padding: 0.5rem;
 }
 
 .ai-header {
@@ -1322,6 +1317,15 @@ const closeAiReasonTooltip = () => {
   color: #6b7c90;
 }
 
+:deep(.ai-suggestion-button::part(button)) {
+  padding: 0 1.2rem;
+  padding-left: 2rem;
+  background-image: url('/ai.svg');
+  background-repeat: no-repeat;
+  background-position: 0.6rem center;
+  background-size: 1rem 1rem;
+}
+
 :deep(.ai-rule-button::part(button)) {
   border: 1px solid #c7d3e3;
   border-radius: 0.5rem;
@@ -1455,7 +1459,7 @@ const closeAiReasonTooltip = () => {
 
 @media (max-width: 1360px) {
   .recommendation-table {
-    min-width: 1020px;
+    width: 100%;
   }
 }
 </style>
