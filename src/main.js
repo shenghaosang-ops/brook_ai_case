@@ -6,6 +6,10 @@ import App from './App.vue'
 import '@ui5/webcomponents/dist/Assets.js'
 import '@ui5/webcomponents-fiori/dist/Assets.js'
 
+// 设置 UI5 语言为英文
+import { setLanguage } from '@ui5/webcomponents-base/dist/config/Language.js'
+setLanguage('en')
+
 import '@ui5/webcomponents/dist/Button.js'
 import '@ui5/webcomponents/dist/Input.js'
 import '@ui5/webcomponents/dist/Icon.js'

@@ -269,6 +269,253 @@ app.post('/api/send-email', async (req, res) => {
   }
 })
 
+// ============ AI Core Token 缓存 ============
+let aiCoreCachedToken = null
+let aiCoreTokenExpiry = null
+
+/**
+ * 获取 AI Core OAuth 2.0 访问令牌
+ */
+async function getAICoreAccessToken() {
+  if (aiCoreCachedToken && aiCoreTokenExpiry && Date.now() < aiCoreTokenExpiry) {
+    console.log('Using cached AI Core token')
+    return aiCoreCachedToken
+  }
+
+  console.log('Fetching new AI Core access token...')
+  
+  try {
+    const credentials = Buffer.from(
+      `${process.env.AI_CORE_CLIENT_ID}:${process.env.AI_CORE_CLIENT_SECRET}`
+    ).toString('base64')
+
+    const tokenUrl = `${process.env.AI_CORE_AUTH_URL}/oauth/token`
+
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'grant_type=client_credentials'
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`AI Core token request failed: ${response.status} - ${errorText}`)
+    }
+
+    const data = await response.json()
+    aiCoreCachedToken = data.access_token
+    aiCoreTokenExpiry = Date.now() + (data.expires_in - 300) * 1000
+    
+    console.log('AI Core token fetched successfully')
+    return aiCoreCachedToken
+  } catch (error) {
+    console.error('Failed to get AI Core access token:', error)
+    throw error
+  }
+}
+
+/**
+ * AI Core GPT-5 排序接口
+ */
+app.post('/api/ai-sort-recommendations', async (req, res) => {
+  try {
+    const { data } = req.body
+
+    // 验证必填字段
+    if (!data || !Array.isArray(data)) {
+      return res.status(400).json({
+        error: 'Missing required field',
+        message: 'data array is required'
+      })
+    }
+
+    console.log(`Calling AI Core GPT-5 for sorting ${data.length} recommendations...`)
+
+    // 获取 AI Core 访问令牌
+    const token = await getAICoreAccessToken()
+
+    // Format data with English field names
+    const formattedData = data.map(item => ({
+      "Material ID": item.materialCode,
+      "Material Description": item.materialDescription,
+      "Company": item.companyCode,
+      "Plant": item.plantCode,
+      "Warehouse": item.storageCode,
+      "Country": item.country,
+      "City": item.city,
+      "Quantity": item.availableQuantity,
+      "Quantity Unit": "EA",
+      "Road": item.road,
+      "Road Unit": "KM"
+    }))
+
+    // Build English prompt for AI Core GPT-5
+    const sortingRules = `You need to prioritize and rank the transferable warehouses based on the provided material inventory information, transfer requirements, and transfer rules. Provide an explanation for each record's ranking. The first-ranked warehouse is the priority recommendation for transfer.
+
+First, please confirm the transfer requirements: Transfer material 10000293, 50 units in total, from other warehouses to warehouse 404I (Walldorf) at plant 1010.
+
+Next, please strictly follow these transfer rules:
+1. Prioritize transfers from warehouses starting with "4"
+2. Must transfer in full batches; partial transfers from multiple warehouses are not allowed
+3. Prioritize warehouses with the shortest road distance
+4. Conduct priority ranking and provide the reasoning for each row's ranking
+5. Serial numbers that meet all requirements should be marked as green; serial numbers for transfers that cannot be executed should be marked as red; other serial numbers should be marked as yellow
+
+The material inventory information to be sorted is as follows:
+${JSON.stringify(formattedData, null, 2)}
+
+Please execute the task following these steps:
+1. Filter warehouses: Exclude the target warehouse (no need for transfer), identify warehouses that meet/do not meet the rules
+2. Priority ranking:
+   a. Prioritize warehouses starting with "4" (rule 1)
+   b. Only consider warehouses with inventory quantity ≥ transfer requirement (rule 2, full batch transfer)
+   c. Within the same priority level, sort by road distance from shortest to longest (rule 3)
+3. Mark warehouses:
+   - Green: Warehouses that meet all rules
+   - Red: Warehouses where transfer cannot be executed (e.g., insufficient stock, is target warehouse)
+   - Yellow: Other cases (e.g., meets some rules)
+4. Generate sorting results: Arrange by priority from high to low, and colors should also be arranged as green-yellow-red. Each warehouse needs to include complete inventory information and sorting explanation
+
+Please output the final result in JSON format, where each warehouse object needs to include the following fields:
+- Priority (priority number)
+- Material ID (material ID)
+- Material Description (material description)
+- Company (company code)
+- Plant (plant code)
+- Warehouse (warehouse code)
+- Country (country)
+- City (city)
+- Quantity (inventory quantity)
+- Quantity Unit (quantity unit)
+- Road (road distance)
+- Road Unit (distance unit)
+- color (marker color: green/yellow/red)
+- AI Ranking Results (ranking reasoning, corresponding to rules)
+Output example:
+{
+  'Transfer Requirements': {
+    'Material ID': '10000293',
+    Quantity: '50 EA',
+    Company: '1000',
+    Plant: '1010',
+    'Target Warehouse': '404I',
+    Country: 'DE',
+    City: 'Walldorf'
+  },
+  'sorted_results': [
+    {
+      Priority: 1,
+      'Material ID': '10000293',
+      'Material Description': 'impeller',
+      Company: '1000',
+      Plant: '1010',
+      Warehouse: '406K',
+      Country: 'DE',
+      City: 'Hannover',
+      Quantity: '100 EA',
+      'Quantity Unit': 'EA',
+      Road: '431.000',
+      'Road Unit': 'KM',
+      color: 'green',
+      'AI Ranking Results': "Meets rule 1 ……."
+    },
+    ……]
+  }
+
+Note:
+- Ranking reasoning needs to clearly explain which rules are met/not met
+- Target warehouse needs to be separately marked and placed at the end
+- Ensure road distance data is accurate (note / means no distance)
+- Inventory quantity needs to be compared with transfer requirement (e.g., if transfer 50 then inventory needs ≥50)`
+
+    // 调用 AI Core GPT-5 API（添加 api-version 参数）
+    const apiUrl = `${process.env.AI_CORE_DEPLOYMENT_URL}/chat/completions?api-version=2023-05-15`
+    console.log('AI Core API URL:', apiUrl) // 添加这行调试
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'AI-Resource-Group': 'default'
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: sortingRules
+          }
+        ],
+        frequency_penalty: 0,
+        presence_penalty: 0
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('AI Core API error:', errorText)
+      return res.status(response.status).json({
+        error: 'AI Core API request failed',
+        message: errorText
+      })
+    }
+
+    const aiResponse = await response.json()
+    console.log('AI Core GPT-5 response received')
+    console.log('Full AI response:', JSON.stringify(aiResponse, null, 2))
+    
+    // 提取 GPT-5 返回的内容
+    const aiContent = aiResponse.choices[0]?.message?.content || '[]'
+    console.log('AI content before parsing:', aiContent)
+    
+    // 解析 JSON（去除可能的 markdown 代码块标记）
+    let sortedData
+    try {
+      const cleanContent = aiContent.replace(/```json\n?|\n?```/g, '').trim()
+      const parsed = JSON.parse(cleanContent)
+      
+      // Check multiple possible field names for the sorted array
+      if (parsed.sorted_warehouses && Array.isArray(parsed.sorted_warehouses)) {
+        sortedData = parsed.sorted_warehouses
+        console.log('Extracted sorted_warehouses array from response')
+      } else if (parsed.sorted_results && Array.isArray(parsed.sorted_results)) {
+        sortedData = parsed.sorted_results
+        console.log('Extracted sorted_results array from response')
+      } else if (Array.isArray(parsed)) {
+        sortedData = parsed
+        console.log('Response is already an array')
+      } else {
+        console.warn('AI response structure:', Object.keys(parsed))
+        console.warn('AI response is not an array, wrapping it:', parsed)
+        sortedData = [parsed]
+      }
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', aiContent)
+      console.error('Parse error:', parseError)
+      throw new Error('AI returned invalid JSON format')
+    }
+
+    console.log('AI Core GPT-5 sorting completed successfully')
+    console.log('Sorted data length:', sortedData.length)
+    console.log('Sample result:', sortedData[0])
+    
+    res.json({
+      success: true,
+      data: sortedData,
+      message: 'AI sorting completed',
+      usage: aiResponse.usage
+    })
+  } catch (error) {
+    console.error('Error in /api/ai-sort-recommendations:', error)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    })
+  }
+})
+
 /**
  * 健康检查接口
  */

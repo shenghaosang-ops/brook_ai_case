@@ -90,6 +90,40 @@ export async function sendEmail(emailData) {
 }
 
 /**
+ * 使用 AI Core GPT-4o 对推荐数据进行智能排序
+ * @param {Array} data - 需要排序的推荐数据
+ * @returns {Promise<Array>} AI 排序后的数据
+ */
+export async function aiSortRecommendations(data) {
+  try {
+    console.log('Calling AI Core for intelligent sorting...')
+    
+    const response = await fetch(`${API_BASE_URL}/api/ai-sort-recommendations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        data: data
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || `AI sorting failed: ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log('AI Core sorting successful:', result.usage)
+    
+    return result.data
+  } catch (error) {
+    console.error('Failed to call AI Core:', error)
+    throw error
+  }
+}
+
+/**
  * 获取库存推荐数据
  * @param {string} material - 物料编号
  * @param {string} plant - 工厂编号
@@ -178,5 +212,7 @@ function transformApiData(apiData) {
 }
 
 export default {
-  getStockRecommendations
+  getStockRecommendations,
+  sendEmail,
+  aiSortRecommendations
 }

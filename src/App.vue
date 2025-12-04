@@ -2,12 +2,13 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { getStockRecommendations } from './services/api.js'
 import { sendEmail } from './services/api.js'
+import { aiSortRecommendations } from './services/api.js'
 
 const filters = reactive({
   material: '10000293',
   plant: '1010',
   targetWarehouse: '404I',
-  targetQuantity: '20'
+  targetQuantity: '50'
 })
 
 const aiRecommendations = ref([])
@@ -383,8 +384,8 @@ const onTransferClick = () => {
   confirmForm.plant = `${first.plantCode} ${first.plantName}`
   confirmForm.targetWarehouse = `${filters.targetWarehouse} Shenyang After-sales Warehouse`
   confirmForm.sourceWarehouse = `${first.storageCode} ${first.storageName}`
-  confirmForm.quantity = first.availableQuantity
-  confirmForm.date = '2025-11-18'
+  confirmForm.quantity = filters.targetQuantity
+  confirmForm.date = '2025-12-08'
 
   return runWithLoading('AI Agent is generating a transfer proposal...', () => {
     openDialog(confirmDialogRef)
@@ -441,6 +442,92 @@ const onEmailCancel = () => {
   closeEmailDialog()
 }
 
+// 添加 AI Suggestion 按钮的点击处理函数
+const onAiSuggestionClick = async () => {
+  if (aiRecommendations.value.length === 0) {
+    showToast('No data available for AI sorting. Please search first.')
+    return
+  }
+
+  return runWithLoading('AI Agent is analyzing and re-ranking recommendations...', async () => {
+    try {
+      // 准备发送给 AI 的数据（保留所有字段）
+      const dataForAI = aiRecommendations.value.map(row => ({
+        materialCode: row.materialCode,
+        materialDescription: row.materialDescription,
+        companyCode: row.companyCode,
+        companyName: row.companyName,
+        plantCode: row.plantCode,
+        plantName: row.plantName,
+        storageCode: row.storageCode,
+        storageName: row.storageName,
+        country: row.country,
+        city: row.city,
+        availableQuantity: row.availableQuantity,
+        road: row.road
+      }))
+
+      console.log('Sending data to AI Core GPT-5:', dataForAI.length, 'rows')
+
+      // 调用 AI Core 进行排序
+      const sortedData = await aiSortRecommendations(dataForAI)
+      
+      console.log('Received sorted data from GPT-5:', sortedData)
+      console.log('Type of sortedData:', typeof sortedData, 'Is array:', Array.isArray(sortedData))
+      
+      // Validate sortedData is an array
+      if (!Array.isArray(sortedData)) {
+        console.error('sortedData is not an array:', sortedData)
+        throw new Error('AI returned invalid data format (expected array)')
+      }
+      
+      console.log('=== GPT-5 Color Check ===')
+      sortedData.forEach((item, idx) => {
+      console.log(`Row ${idx + 1}: Warehouse=${item.Warehouse}, color="${item.color}"`)
+      })
+
+      // 转换 AI 返回的数据为前端格式
+      const transformedData = sortedData.map((item, index) => ({
+        key: `row-${index + 1}`,
+        priority: item.Priority || index + 1,
+        available: item.available !== false,
+        materialCode: item['Material ID'] || item.materialCode || '',
+        materialDescription: item['Material Description'] || item.materialDescription || 'impeller',
+        companyCode: item.Company || item.companyCode || '',
+        companyName: 'BestRun CN',
+        plantCode: item.Plant || item.plantCode || '',
+        plantName: `Plant ${item.Plant || item.plantCode || ''}`,
+        storageCode: item.Warehouse || item.storageCode || '',
+        storageName: item.City || item.city || '',
+        country: item.Country || item.country || '',
+        city: item.City || item.city || '',
+        availableQuantity: item.Quantity || item.availableQuantity || '',
+        road: item.Road || item.road || '',
+        reason: item['AI Ranking Results'] || item.reason || 'AI-generated recommendation',
+        color: item.color || '' // 新增：保存颜色字段
+      }))
+
+      // 更新表格数据
+      aiRecommendations.value = transformedData
+
+      // ✅ 添加这一行：显示 AI 列
+      showAiColumns.value = true
+
+      console.log('AI sorting completed:', transformedData.length, 'rows ranked')
+      console.log('Color distribution:', {
+        green: transformedData.filter(r => r.color === 'green').length,
+        yellow: transformedData.filter(r => r.color === 'yellow').length,
+        red: transformedData.filter(r => r.color === 'red').length
+      })
+      
+      showToast(`✨ AI re-ranking completed! ${transformedData.length} recommendations optimized.`)
+    } catch (error) {
+      console.error('AI sorting failed:', error)
+      showToast(`AI sorting failed: ${error.message}`)
+    }
+  }, 4000) // GPT-5 需要更多时间处理
+}
+
 const priorityDisplay = (row) => {
   if (!row.available) {
     return { icon: 'status-error', label: null }
@@ -491,10 +578,10 @@ const closeEmailDialog = () => {
   closeDialog(emailDialogRef)
 }
 
-const onAiSuggestionClick = () => {
-  showAiColumns.value = true
-  showToast('AI ranking columns are now visible')
-}
+// const onAiSuggestionClick = () => {
+//   showAiColumns.value = true
+//   showToast('AI ranking columns are now visible')
+// }
 
 const onSearchClick = async () => {
   if (!filters.material || !filters.plant) {
@@ -502,7 +589,7 @@ const onSearchClick = async () => {
     return
   }
 
-  return runWithLoading('Fetching real-time data from CPI...', async () => {
+  return runWithLoading('Fetching real-time data', async () => {
     try {
       console.log('Before API call, current data length:', aiRecommendations.value.length)
       const data = await getStockRecommendations(
@@ -518,6 +605,9 @@ const onSearchClick = async () => {
       aiRecommendations.value = []
       await new Promise(resolve => setTimeout(resolve, 0))
       aiRecommendations.value = data
+
+      // ✅ 添加这一行：隐藏 AI 列（因为 Search 只显示基础数据）
+      showAiColumns.value = false
       
       console.log('After assignment, aiRecommendations length:', aiRecommendations.value.length)
       
@@ -697,14 +787,18 @@ const closeAiReasonTooltip = () => {
             </ui5-table-cell>
             <ui5-table-cell v-if="showAiColumns">
               <div class="priority-cell">
-                <template v-if="priorityDisplay(row).icon">
-                  <ui5-icon :name="priorityDisplay(row).icon" class="status-icon danger" />
+                <template v-if="!row.available">
+                  <ui5-icon name="status-error" class="status-icon danger" />
                 </template>
-                <template v-else>
+                <template v-else-if="row.priority">
                   <span
                     class="priority-badge"
-                    :class="{ warn: row.priority >= 3 && row.priority <= 7 }"
-                    >{{ priorityDisplay(row).label }}</span
+                    :class="{
+                      'badge-green': row.color === 'green',
+                      'badge-yellow': row.color === 'yellow',
+                      'badge-red': row.color === 'red'
+                    }"
+                    >{{ row.priority }}</span
                   >
                 </template>
               </div>
@@ -745,7 +839,7 @@ const closeAiReasonTooltip = () => {
               <div class="cell">{{ row.road }} KM</div>
             </ui5-table-cell>
             <ui5-table-cell v-if="showAiColumns" class="ai-reason-cell">
-              <div class="cell ai-text">{{ row.reason }}</div>
+              <div class="ai-text-wrapper" style="white-space: normal; word-wrap: break-word; word-break: break-word;">{{ row.reason }}</div>
             </ui5-table-cell>
             </ui5-table-row>
           </ui5-table>
@@ -999,22 +1093,27 @@ const closeAiReasonTooltip = () => {
 
 .table-card.wide .recommendation-table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto; /* 改回 auto 让 AI 列自动扩展 */
+  min-width: fit-content; /* 根据内容自动计算 */
 }
 
-/* Column width distribution */
-:deep(.col-select) { width: 3%; min-width: 60px; }
-:deep(.col-priority) { width: 2%; min-width: 70px; }
-:deep(.col-material) { width: 7%; min-width: 90px; }
-:deep(.col-desc) { width: 7%; min-width: 90px; }
-:deep(.col-company) { width: 9%; min-width: 100px; }
-:deep(.col-plant) { width: 8%; min-width: 90px; }
-:deep(.col-warehouse) { width: 8%; min-width: 90px; }
-:deep(.col-country) { width: 6%; min-width: 80px; }
-:deep(.col-city) { width: 9%; min-width: 90px; }
-:deep(.col-qty) { width: 9%; min-width: 100px; }
-:deep(.col-road) { width: 8%; min-width: 90px; }
-:deep(.col-ai-result) { width: 24%; min-width: 250px; }
+/* Column width - 其他列固定宽度，AI 列自动扩展 */
+:deep(.col-select) { width: 50px; min-width: 50px; max-width: 50px; }
+:deep(.col-priority) { width: 60px; min-width: 60px; max-width: 60px; }
+:deep(.col-material) { width: 100px; min-width: 100px; max-width: 100px; }
+:deep(.col-desc) { width: 100px; min-width: 100px; max-width: 100px; }
+:deep(.col-company) { width: 120px; min-width: 120px; max-width: 120px; }
+:deep(.col-plant) { width: 100px; min-width: 100px; max-width: 100px; }
+:deep(.col-warehouse) { width: 90px; min-width: 90px; max-width: 90px; }
+:deep(.col-country) { width: 70px; min-width: 70px; max-width: 70px; }
+:deep(.col-city) { width: 110px; min-width: 110px; max-width: 110px; }
+:deep(.col-qty) { width: 110px; min-width: 110px; max-width: 110px; }
+:deep(.col-road) { width: 90px; min-width: 90px; max-width: 90px; }
+:deep(.col-ai-result) { 
+  width: auto;
+  min-width: 450px;
+  max-width: none;
+}
 
 .selection-cell {
   display: flex;
@@ -1026,18 +1125,49 @@ const closeAiReasonTooltip = () => {
   cursor: pointer;
 }
 
+/* AI Ranking Result 列容器 */
 .ai-reason-cell {
-  min-width: 200px;
+  width: auto !important;
+  min-width: 450px !important;
+  max-width: none !important;
 }
 
-.ai-text {
+/* 强制覆盖 UI5 Table Cell 的所有限制 */
+:deep(ui5-table-cell.ai-reason-cell),
+:deep(.ai-reason-cell),
+:deep(.ai-reason-cell.ui5-table-cell) {
+  overflow: visible !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  word-break: break-word !important;
+  width: auto !important;
+  min-width: 450px !important;
+  max-width: none !important;
+  padding: 0.4rem 0.75rem !important;
+  vertical-align: top !important;
+}
+
+/* AI 文本包装器 */
+.ai-text-wrapper {
   display: block;
   white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.5;
+  min-width: 450px;
+  width: auto;
+  max-width: none;
+}
+
+/* 保留旧的 .ai-text 类以防万一 */
+.ai-text {
+  display: block;
+  white-space: pre-wrap;
   line-height: 1.5;
   word-break: break-word;
   overflow-wrap: break-word;
-  max-width: 100%;
-  padding: 0.5rem;
+  padding: 0.4rem 0.75rem;
 }
 
 .ai-header {
@@ -1201,34 +1331,129 @@ const closeAiReasonTooltip = () => {
 
 :deep(.table-row .ui5-table-cell) {
   border-bottom: 1px solid #e4e9f1;
-  padding: 0.85rem 1rem;
+  padding: 0.3rem 0.5rem;
   font-size: 0.95rem;
   color: #2f3c48;
+  line-height: 1.3;
+  overflow: hidden; /* 默认隐藏溢出 */
+}
+
+/* AI Ranking Result 列的特殊样式（已合并到上面，这里保留以防引用） */
+:deep(.ai-reason-cell.ui5-table-cell) {
+  overflow: visible !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  max-width: none !important;
+  padding: 0.4rem 0.75rem !important;
 }
 
 :deep(.table-row .ui5-table-cell:first-child) {
   padding: 0;
 }
 
-:deep(.table-row:nth-child(even) .ui5-table-cell) {
+/* 奇偶行样式 - 只在没有颜色类时生效 */
+:deep(.table-row:nth-child(even):not(.row-red):not(.row-yellow):not(.row-green) .ui5-table-cell) {
   background-color: #fafcff;
 }
 
-:deep(.table-row:not(.selected):hover .ui5-table-cell) {
+:deep(.table-row:not(.selected):not(.row-red):not(.row-yellow):not(.row-green):hover .ui5-table-cell) {
   background-color: #f3f6f9;
 }
 
-:deep(.table-row.selected .ui5-table-cell) {
+:deep(.table-row.selected:not(.row-red):not(.row-yellow):not(.row-green) .ui5-table-cell) {
   background-color: #ebf3ff;
   box-shadow: inset 3px 0 0 #0a6ed1;
 }
 
-:deep(.table-row.selected:hover .ui5-table-cell) {
+:deep(.table-row.selected:not(.row-red):not(.row-yellow):not(.row-green):hover .ui5-table-cell) {
   background-color: #e1ecff;
 }
 
 :deep(.table-row .ui5-table-cell:not(:last-child)) {
   border-right: 1px solid #edf1f6;
+}
+
+/* ========== AI 颜色标识样式（按优先级排序）========== */
+
+/* 红色行 - 无法调拨（最高优先级，覆盖其他样式） */
+:deep(ui5-table-row.row-red),
+:deep(ui5-table-row.row-red) ui5-table-cell,
+:deep(.table-row.row-red),
+:deep(.table-row.row-red) .ui5-table-cell {
+  background-color: #ffebee !important;
+}
+
+:deep(ui5-table-row.row-red),
+:deep(.table-row.row-red) {
+  border-left: 4px solid #f44336 !important;
+}
+
+:deep(ui5-table-row.row-red:hover),
+:deep(ui5-table-row.row-red:hover) ui5-table-cell,
+:deep(.table-row.row-red:hover),
+:deep(.table-row.row-red:hover) .ui5-table-cell {
+  background-color: #ffcdd2 !important;
+}
+
+:deep(ui5-table-row.row-red.selected),
+:deep(ui5-table-row.row-red.selected) ui5-table-cell,
+:deep(.table-row.row-red.selected),
+:deep(.table-row.row-red.selected) .ui5-table-cell {
+  background-color: #ef9a9a !important;
+}
+
+/* 黄色行 - 备选方案 */
+:deep(ui5-table-row.row-yellow),
+:deep(ui5-table-row.row-yellow) ui5-table-cell,
+:deep(.table-row.row-yellow),
+:deep(.table-row.row-yellow) .ui5-table-cell {
+  background-color: #fff9c4 !important;
+}
+
+:deep(ui5-table-row.row-yellow),
+:deep(.table-row.row-yellow) {
+  border-left: 4px solid #ffc107 !important;
+}
+
+:deep(ui5-table-row.row-yellow:hover),
+:deep(ui5-table-row.row-yellow:hover) ui5-table-cell,
+:deep(.table-row.row-yellow:hover),
+:deep(.table-row.row-yellow:hover) .ui5-table-cell {
+  background-color: #fff59d !important;
+}
+
+:deep(ui5-table-row.row-yellow.selected),
+:deep(ui5-table-row.row-yellow.selected) ui5-table-cell,
+:deep(.table-row.row-yellow.selected),
+:deep(.table-row.row-yellow.selected) .ui5-table-cell {
+  background-color: #fff176 !important;
+}
+
+/* 绿色行 - 最优推荐 */
+:deep(ui5-table-row.row-green),
+:deep(ui5-table-row.row-green) ui5-table-cell,
+:deep(.table-row.row-green),
+:deep(.table-row.row-green) .ui5-table-cell {
+  background-color: #e8f5e9 !important;
+}
+
+:deep(ui5-table-row.row-green),
+:deep(.table-row.row-green) {
+  border-left: 4px solid #4caf50 !important;
+}
+
+:deep(ui5-table-row.row-green:hover),
+:deep(ui5-table-row.row-green:hover) ui5-table-cell,
+:deep(.table-row.row-green:hover),
+:deep(.table-row.row-green:hover) .ui5-table-cell {
+  background-color: #c8e6c9 !important;
+}
+
+:deep(ui5-table-row.row-green.selected),
+:deep(ui5-table-row.row-green.selected) ui5-table-cell,
+:deep(.table-row.row-green.selected),
+:deep(.table-row.row-green.selected) .ui5-table-cell {
+  background-color: #a5d6a7 !important;
 }
 
 .priority-cell {
@@ -1245,15 +1470,26 @@ const closeAiReasonTooltip = () => {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 0.4rem;
-  background-color: #e5f5eb;
-  color: #107e3e;
   font-weight: 600;
   font-size: 0.95rem;
 }
 
-.priority-badge.warn {
-  background-color: #fff6d1; /* light yellow */
-  color: #8a6d00; /* dark yellow text for contrast */
+/* 绿色 priority - 最优推荐 */
+.priority-badge.badge-green {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* 黄色 priority - 备选方案 */
+.priority-badge.badge-yellow {
+  background-color: #fff9c4;
+  color: #f57c00;
+}
+
+/* 红色 priority - 无法调拨（不会显示，因为 available=false 时显示错误图标） */
+.priority-badge.badge-red {
+  background-color: #ffebee;
+  color: #c62828;
 }
 
 .status-icon {
@@ -1320,7 +1556,7 @@ const closeAiReasonTooltip = () => {
 :deep(.ai-suggestion-button::part(button)) {
   padding: 0 1.2rem;
   padding-left: 2rem;
-  background-image: url('/ai.svg');
+  background-image: url('/ai-white.svg');
   background-repeat: no-repeat;
   background-position: 0.6rem center;
   background-size: 1rem 1rem;
