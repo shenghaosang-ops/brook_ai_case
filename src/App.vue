@@ -839,7 +839,7 @@ const closeAiReasonTooltip = () => {
               <div class="cell">{{ row.road }} KM</div>
             </ui5-table-cell>
             <ui5-table-cell v-if="showAiColumns" class="ai-reason-cell">
-              <div class="ai-text-wrapper" style="white-space: normal; word-wrap: break-word; word-break: break-word;">{{ row.reason }}</div>
+              <div class="ai-text-content">{{ row.reason }}</div>
             </ui5-table-cell>
             </ui5-table-row>
           </ui5-table>
@@ -1091,73 +1091,56 @@ const closeAiReasonTooltip = () => {
   font-size: 1.05rem;
 }
 
+/* Table layout - 改为 auto 让列宽自适应 */
 .table-card.wide .recommendation-table {
   width: 100%;
-  table-layout: auto; /* 改回 auto 让 AI 列自动扩展 */
-  min-width: fit-content; /* 根据内容自动计算 */
+  table-layout: fixed;
+  min-width: 1900px; /* 增加总宽度以容纳更宽的 AI 列 */
 }
 
-/* Column width - 其他列固定宽度，AI 列自动扩展 */
-:deep(.col-select) { width: 50px; min-width: 50px; max-width: 50px; }
-:deep(.col-priority) { width: 60px; min-width: 60px; max-width: 60px; }
-:deep(.col-material) { width: 100px; min-width: 100px; max-width: 100px; }
-:deep(.col-desc) { width: 100px; min-width: 100px; max-width: 100px; }
-:deep(.col-company) { width: 120px; min-width: 120px; max-width: 120px; }
-:deep(.col-plant) { width: 100px; min-width: 100px; max-width: 100px; }
-:deep(.col-warehouse) { width: 90px; min-width: 90px; max-width: 90px; }
-:deep(.col-country) { width: 70px; min-width: 70px; max-width: 70px; }
-:deep(.col-city) { width: 110px; min-width: 110px; max-width: 110px; }
-:deep(.col-qty) { width: 110px; min-width: 110px; max-width: 110px; }
-:deep(.col-road) { width: 90px; min-width: 90px; max-width: 90px; }
-:deep(.col-ai-result) { 
-  width: auto;
-  min-width: 450px;
-  max-width: none;
-}
+/* 2. 重新分配每一列的宽度 */
+:deep(.col-select) { width: 50px; }      /* 选择框 */
+:deep(.col-priority) { width: 70px; }     /* 优先级 */
+:deep(.col-material) { width: 100px; }    /* 物料 ID */
+:deep(.col-desc) { width: 130px; }      /* 物料描述 */
+:deep(.col-company) { width: 110px; }     /* 公司 */
+:deep(.col-plant) { width: 110px; }       /* 工厂 */
+:deep(.col-warehouse) { width: 90px; }    /* 仓库 */
+:deep(.col-country) { width: 70px; }      /* 国家 */
+:deep(.col-city) { width: 120px; }       /* 城市 */
+:deep(.col-qty) { width: 110px; }        /* 可用数量 */
+:deep(.col-road) { width: 90px; }         /* 路程 */
+:deep(.col-ai-result) { width: 750px; }   /* AI 结果列 (加宽) */
 
-.selection-cell {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 2.5rem;
-  width: 100%;
-  padding: 0 0.5rem;
-  cursor: pointer;
-}
 
-/* AI Ranking Result 列容器 */
-.ai-reason-cell {
-  width: auto !important;
-  min-width: 450px !important;
-  max-width: none !important;
-}
-
-/* 强制覆盖 UI5 Table Cell 的所有限制 */
-:deep(ui5-table-cell.ai-reason-cell),
-:deep(.ai-reason-cell),
-:deep(.ai-reason-cell.ui5-table-cell) {
+/* 3. 强制穿透 Shadow DOM，更新内部容器的宽度 */
+:deep(.ai-reason-cell) {
   overflow: visible !important;
+}
+
+:deep(.ai-reason-cell::part(cell)) {
+  /* 将宽度更新为新的 750px */
+  width: 750px !important;
+  max-width: 750px !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  overflow: visible !important;
+  height: auto !important;
+}
+
+/* 4. 内容 div 样式保持不变 */
+.ai-text-content {
+  width: 100%;
+  padding: 0.4rem 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #2f3c48;
   white-space: normal !important;
   word-wrap: break-word !important;
   word-break: break-word !important;
-  width: auto !important;
-  min-width: 450px !important;
-  max-width: none !important;
-  padding: 0.4rem 0.75rem !important;
-  vertical-align: top !important;
-}
-
-/* AI 文本包装器 */
-.ai-text-wrapper {
-  display: block;
-  white-space: normal;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  line-height: 1.5;
-  min-width: 450px;
-  width: auto;
-  max-width: none;
+  overflow-wrap: break-word !important;
+  box-sizing: border-box;
 }
 
 /* 保留旧的 .ai-text 类以防万一 */
