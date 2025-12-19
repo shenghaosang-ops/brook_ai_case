@@ -124,6 +124,40 @@ export async function aiSortRecommendations(data) {
 }
 
 /**
+ * confirm启动BPA工作流
+ * @param {*} data 
+ * @returns 
+ */
+export async function startTransferWorkflow(data) {
+  // 修改这里：添加 API_BASE_URL 前缀，确保请求发往 http://localhost:3001
+  const url = `${API_BASE_URL}/api/bpa/start-workflow`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  })
+
+  // 增加更详细的错误处理
+  const text = await response.text()
+  let result
+  try {
+    result = text ? JSON.parse(text) : {}
+  } catch (e) {
+    // 如果返回的不是 JSON（比如 404 Not Found 纯文本），手动构造错误对象
+    result = { message: text || response.statusText }
+  }
+
+  if (!response.ok) {
+    throw new Error(result.message || result.error || `Workflow start failed (${response.status})`)
+  }
+
+  return result
+}
+
+/**
  * 获取库存推荐数据
  * @param {string} material - 物料编号
  * @param {string} plant - 工厂编号

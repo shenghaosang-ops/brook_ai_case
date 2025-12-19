@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { getStockRecommendations } from './services/api.js'
 import { sendEmail } from './services/api.js'
 import { aiSortRecommendations } from './services/api.js'
+import { startTransferWorkflow } from './services/api.js'
 
 const filters = reactive({
   material: '10000293',
@@ -393,12 +394,34 @@ const onTransferClick = () => {
 }
 
 const onConfirmDialogApprove = () => {
-  return runWithLoading('AI Agent is creating the transfer order...', () => {
-    closeConfirmDialog()
-    emailForm.subject = `Transfer order ${transferOrderNumber.value} notification: ${confirmForm.material}`
-    emailContent.value = buildEmailTemplate()
-    showToast(`Transfer order ${transferOrderNumber.value} has been created.`)
-    openDialog(emailDialogRef)
+  return runWithLoading('AI Agent is creating the transfer order...', async () => {
+    try {
+      // 提取仓库ID (取空格前的部分)
+      const targetId = (confirmForm.targetWarehouse || '').split(' ')[0]
+      const sourceId = (confirmForm.sourceWarehouse || '').split(' ')[0]
+
+      console.log('target Warehouse:', targetId)
+      console.log('source Warehouse:', sourceId)
+      const result = await startTransferWorkflow({
+        targetWarehouse: targetId,
+        sourceWarehouse: sourceId,
+        quantity: confirmForm.quantity
+      })
+
+      console.log('Workflow started:', result)
+      
+      closeConfirmDialog()
+      // 不再打开邮件对话框
+      // emailForm.subject = ...
+      // openDialog(emailDialogRef)
+      
+      const wfId = result.id || result.workflowInstanceId || 'N/A'
+      await showToast(`Transfer workflow started successfully ✅ (ID: ${wfId})`)
+      
+    } catch (error) {
+      console.error('Failed to start workflow:', error)
+      await showToast(`Failed to start workflow: ${error.message}`)
+    }
   }, 1000)
 }
 

@@ -516,6 +516,120 @@ Note:
   }
 })
 
+// ============ BPA Workflow Token 缓存 ============
+let bpaWorkflowCachedToken = null
+let bpaWorkflowTokenExpiry = null
+
+async function getBpaWorkflowToken() {
+  if (bpaWorkflowCachedToken && bpaWorkflowTokenExpiry && Date.now() < bpaWorkflowTokenExpiry) {
+    return bpaWorkflowCachedToken
+  }
+  
+  let authUrl = process.env.BPA_WORKFLOW_AUTH_URL
+  if (authUrl && !authUrl.endsWith('/oauth/token')) {
+    authUrl = `${authUrl}/oauth/token`
+  }
+  const clientId = process.env.BPA_WORKFLOW_CLIENT_ID
+  const clientSecret = process.env.BPA_WORKFLOW_CLIENT_SECRET
+
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+
+  const response = await fetch(authUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'grant_type=client_credentials'
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to get BPA token: ${response.statusText}`)
+  }
+
+  const data = await response.json()
+  bpaWorkflowCachedToken = data.access_token
+  bpaWorkflowTokenExpiry = Date.now() + (data.expires_in - 60) * 1000
+  return bpaWorkflowCachedToken
+}
+
+/**
+ * 触发 BPA Transfer Order 工作流
+ */
+app.post('/api/bpa/start-workflow', async (req, res) => {
+  try {
+    const { targetWarehouse, sourceWarehouse, quantity } = req.body
+    
+    const token = await getBpaWorkflowToken()
+    
+    const payload = {
+      "definitionId": "eu12.joulestudio.transferorder.transferOrder",
+      "context": {
+        "purchaseOrderType": "NB",
+        "purchaseOrderDate": "2025-12-10",
+        "companyCode": "1500",
+        "purchasingOrganization": "1500",
+        "purchasingGroup": "101",
+        "supplier": "1000010",
+        "purchaseOrderItem": "00010",
+        "material": "10000040",
+        "plant": "1500",
+        "storageLocation": "1000",
+        "orderQuantity": 1000,
+        "purchaseOrderQuantityUnit": "KG",
+        "taxCode": "J2",
+        "targetWarehouse": targetWarehouse,
+        "sourceWarehouse": sourceWarehouse,
+        "quantity": String(quantity)
+      }
+    }
+
+    const response = await fetch(process.env.BPA_WORKFLOW_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'irpa-api-key': 'PMocvtsblhcwZjdC-JOVfmXyUwVsos2E'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    // 1. 先读取为纯文本，避免直接 json() 解析报错
+    const text = await response.text()
+    console.log('BPA Response Status:', response.status)
+    console.log('BPA Response Body:', text)
+
+    let data = {}
+    try {
+      // 2. 尝试解析 JSON
+      if (text && text.trim()) {
+        data = JSON.parse(text)
+      }
+    } catch (e) {
+      console.warn('BPA returned non-JSON body, using fallback.')
+      data = { message: text }
+    }
+
+    // 3. 如果 Body 中没有 ID，尝试从 Location Header 获取 (常见于 201 Created)
+    const locationHeader = response.headers.get('location')
+    if (locationHeader && !data.id && !data.workflowInstanceId) {
+      const parts = locationHeader.split('/')
+      data.id = parts[parts.length - 1]
+      console.log('Extracted ID from Location header:', data.id)
+    }
+    
+    if (!response.ok) {
+      return res.status(response.status).json(data)
+    }
+
+    res.json(data)
+
+  } catch (error) {
+    console.error('BPA Workflow Error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 /**
  * 健康检查接口
  */
